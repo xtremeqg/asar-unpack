@@ -1,0 +1,45 @@
+#!/usr/bin/node
+
+const fs = require("fs");
+const process = require("process");
+const console = require("console");
+const path = require("path");
+
+let baseoffset;
+
+function extract(fd, files, dir) {
+	if (!fs.existsSync(dir)) {
+		fs.mkdirSync(dir, {recursive: true})
+	}
+	for (name in files) {
+		const file = files[name];
+		if (file.files) {
+			extract(fd, file.files, dir+"/"+name);
+		} else if (file.link) {
+			continue;
+		} else {
+			const size = parseInt(file.size);
+			if (size > 0) {
+				const offset = parseInt(file.offset)+baseoffset;
+				console.log(dir+"/"+name, size, offset);
+				const buffer = Buffer.alloc(size);
+				fs.readSync(fd, buffer, 0, size, offset);
+				fs.writeFileSync(dir+"/"+name, buffer);
+			} else {
+				fs.writeFileSync(dir+"/"+name, "");
+			}
+		}
+	}
+}
+
+
+if (process.argv.length > 2) {
+	const fd = fs.openSync(process.argv[2], "r");
+	const header = new Int32Array(4);
+	fs.readSync(fd, header, 0, 16);
+	const meta = Buffer.alloc(header[3]);
+	fs.readSync(fd, meta, 0, header[3]);
+	const root = JSON.parse(meta.toString());
+	baseoffset = 16 + header[3];
+	extract(fd, root.files, ".");
+}
